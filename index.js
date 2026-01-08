@@ -4,16 +4,51 @@ const fs = require("fs");
 require("dotenv").config();
 
 // ===== 1. SERVIDOR PARA RENDER & UPTIMEROBOT =====
+// Usamos process.env.PORT porque Render lo asigna dinámicamente
+const port = process.env.PORT || 3000;
 http.createServer((req, res) => {
   res.write("El bot de rol Astra está vivo.");
   res.end();
-}).listen(process.env.PORT || 3000);
-
-const client = new Client({
-  intents: [GatewayIntentBits.Guilds]
+}).listen(port, () => {
+  console.log(`🚀 Servidor web activo en el puerto ${port}`);
 });
 
-// ===== 2. CONFIGURACIÓN DEL ROL =====
+// ===== 2. CONFIGURACIÓN DEL CLIENTE (INTENTS CORREGIDOS) =====
+const client = new Client({
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.MessageContent, // Necesario para leer comandos y mensajes
+    GatewayIntentBits.GuildMembers    // Necesario para temas de rol y perfiles
+  ]
+});
+
+// ===== 3. BASE DE DATOS LOCAL (SOPORTE PARA RENDER) =====
+const DATA_FILE = "data.json";
+let data = { usuarios: {}, casas: {} };
+
+// Función para cargar datos de forma segura
+function cargarDatos() {
+  if (fs.existsSync(DATA_FILE)) {
+    try {
+      const contenido = fs.readFileSync(DATA_FILE, "utf8");
+      data = JSON.parse(contenido);
+    } catch (e) {
+      console.error("❌ Error al leer data.json, se usará una base vacía.");
+    }
+  } else {
+    fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
+  }
+}
+
+// Guardar datos
+function guardarDatos() {
+  fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
+}
+
+cargarDatos();
+
+// ===== 4. CONFIGURACIÓN DEL ROL =====
 const casas = [
   "﹒♡﹒Casa Alteira﹒★",
   "﹒ ＋﹒Casa Viperthon ﹕✧",
@@ -62,7 +97,7 @@ const lore = [
   "La magia responde a quienes perseveran."
 ];
 
-// ===== 3. FUNCIONES AUXILIARES =====
+// ===== 5. FUNCIONES AUXILIARES =====
 function xpNecesaria(nivel) { return nivel * 100; }
 
 function obtenerTitulo(nivel) {
@@ -71,7 +106,7 @@ function obtenerTitulo(nivel) {
   return titulo;
 }
 
-// ===== 4. EVENTO READY & REGISTRO DE COMANDOS =====
+// ===== 6. EVENTO READY & REGISTRO DE COMANDOS =====
 client.once("ready", async () => {
   console.log(`✨ Astra activa como ${client.user.tag}`);
 
@@ -96,17 +131,9 @@ client.once("ready", async () => {
   }
 });
 
-// ===== 5. LÓGICA DE INTERACCIONES =====
+// ===== 7. LÓGICA DE INTERACCIONES =====
 client.on("interactionCreate", async interaction => {
   if (!interaction.isChatInputCommand()) return;
-
-  // Leer base de datos local
-  let data;
-  try {
-    data = JSON.parse(fs.readFileSync("data.json"));
-  } catch (e) {
-    return interaction.reply("❌ Error: El archivo data.json no existe o está mal formado.");
-  }
 
   // REGISTRAR OC
   if (interaction.commandName === "registrar_oc") {
@@ -119,7 +146,7 @@ client.on("interactionCreate", async interaction => {
       nombre, personalidad, casa, afinidad, nivel: 1, xp: 0, mision: null, lore: 0
     };
 
-    fs.writeFileSync("data.json", JSON.stringify(data, null, 2));
+    guardarDatos();
     return interaction.reply({ embeds: [new EmbedBuilder().setTitle("📜 Destino sellado").setDescription(`**${nombre}** ha sido asignado a **${casa}** con afinidad **${afinidad}**`).setColor(0x6a5acd)] });
   }
 
@@ -139,7 +166,7 @@ client.on("interactionCreate", async interaction => {
     const pool = Math.random() < 0.15 ? misionesSecretas : misiones;
     u.mision = pool[Math.floor(Math.random() * pool.length)];
 
-    fs.writeFileSync("data.json", JSON.stringify(data, null, 2));
+    guardarDatos();
     return interaction.reply({ embeds: [new EmbedBuilder().setTitle("📜 Misión asignada").setDescription(`✨ ${u.mision.texto}\n📈 Recompensa: ${u.mision.xp} XP`).setColor(0x3cb371)] });
   }
 
@@ -158,7 +185,7 @@ client.on("interactionCreate", async interaction => {
       if (u.lore < lore.length) u.lore++;
     }
 
-    fs.writeFileSync("data.json", JSON.stringify(data, null, 2));
+    guardarDatos();
     return interaction.reply("✅ ¡Misión completada! Has ganado XP y puntos para tu casa.");
   }
 
@@ -183,4 +210,5 @@ client.on("interactionCreate", async interaction => {
   }
 });
 
+// LOGIN
 client.login(process.env.TOKEN);
